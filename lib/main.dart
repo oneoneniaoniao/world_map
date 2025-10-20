@@ -60,14 +60,6 @@ class _WorldMapPageState extends State<WorldMapPage> {
       isoToNames[iso]!.add(name);
     }
 
-    // 重複しているISO_A3を出力
-    debugPrint('=== ISO_A3 重複チェック ===');
-    isoToNames.forEach((iso, names) {
-      if (names.length > 1) {
-        print('$iso: ${names.join(", ")}');
-      }
-    });
-
     setState(() {
       countries = features;
       isLoading = false;
@@ -212,18 +204,35 @@ class _WorldMapPageState extends State<WorldMapPage> {
 
   bool _isPointInCountry(LatLng point, Map<String, dynamic> geometry) {
     if (geometry['type'] == 'Polygon') {
-      return _isPointInPolygon(
-        point,
-        parseCoordinates(geometry['coordinates'][0]),
-      );
+      return _isPointInPolygonWithHoles(point, geometry['coordinates']);
     } else if (geometry['type'] == 'MultiPolygon') {
       for (var polygonCoords in geometry['coordinates']) {
-        if (_isPointInPolygon(point, parseCoordinates(polygonCoords[0]))) {
+        if (_isPointInPolygonWithHoles(point, polygonCoords)) {
           return true;
         }
       }
     }
     return false;
+  }
+
+  // 穴を考慮したポイント判定（新しいメソッド）
+  bool _isPointInPolygonWithHoles(LatLng point, List coordinates) {
+    // coordinates[0] = 外側の輪郭
+    // coordinates[1以降] = 穴（holes）
+
+    // まず外側の輪郭に含まれるかチェック
+    if (!_isPointInPolygon(point, parseCoordinates(coordinates[0]))) {
+      return false; // 外側の輪郭に含まれていない
+    }
+
+    // 穴に含まれていないかチェック
+    for (int i = 1; i < coordinates.length; i++) {
+      if (_isPointInPolygon(point, parseCoordinates(coordinates[i]))) {
+        return false; // 穴の中にある = 国の外
+      }
+    }
+
+    return true; // 外側に含まれ、穴には含まれない
   }
 
   bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
@@ -256,22 +265,28 @@ class _WorldMapPageState extends State<WorldMapPage> {
               : Colors.grey.withValues(alpha: 0.3);
 
       if (geometry['type'] == 'Polygon') {
+        // 外側の輪郭のみ描画（ring[0]のみ）
         allPolygons.add(
           Polygon(
             points: parseCoordinates(geometry['coordinates'][0]),
             color: color,
             borderColor: Colors.black,
             borderStrokeWidth: 1,
+            // 穴を設定
+            holePointsList: _extractHoles(geometry['coordinates']),
           ),
         );
       } else if (geometry['type'] == 'MultiPolygon') {
         for (var polygonCoords in geometry['coordinates']) {
+          // 各MultiPolygonの外側の輪郭のみ描画
           allPolygons.add(
             Polygon(
               points: parseCoordinates(polygonCoords[0]),
               color: color,
               borderColor: Colors.black,
               borderStrokeWidth: 1,
+              // 穴を設定
+              holePointsList: _extractHoles(polygonCoords),
             ),
           );
         }
@@ -279,5 +294,17 @@ class _WorldMapPageState extends State<WorldMapPage> {
     }
 
     return allPolygons;
+  }
+
+  // 穴のリストを抽出する新しいメソッド
+  List<List<LatLng>> _extractHoles(List coordinates) {
+    List<List<LatLng>> holes = [];
+
+    // coordinates[1以降]が穴
+    for (int i = 1; i < coordinates.length; i++) {
+      holes.add(parseCoordinates(coordinates[i]));
+    }
+
+    return holes;
   }
 }
