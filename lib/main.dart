@@ -59,7 +59,6 @@ class _WorldMapPageState extends State<WorldMapPage> {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     if (isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -72,12 +71,63 @@ class _WorldMapPageState extends State<WorldMapPage> {
           initialCenter: LatLng(20, 0),
           initialZoom: 2,
           onTap: (tapPosition, point) {
-            // タップ処理（次のステップで実装）
+            _handleMapTap(point);
           },
         ),
         children: [PolygonLayer(polygons: _buildAllPolygons())],
       ),
     );
+  }
+
+  void _handleMapTap(LatLng point) {
+    // タップされた座標がどの国のポリゴン内にあるか判定
+    for (var country in countries) {
+      final countryId = country['properties']['ISO_A3'] ?? '';
+      final geometry = country['geometry'];
+
+      if (_isPointInCountry(point, geometry)) {
+        setState(() {
+          if (selectedCountries.contains(countryId)) {
+            selectedCountries.remove(countryId); // 既に選択済みなら解除
+          } else {
+            selectedCountries.add(countryId); // 選択
+          }
+        });
+        break; // 最初に見つかった国で終了
+      }
+    }
+  }
+
+  bool _isPointInCountry(LatLng point, Map<String, dynamic> geometry) {
+    if (geometry['type'] == 'Polygon') {
+      return _isPointInPolygon(
+        point,
+        parseCoordinates(geometry['coordinates'][0]),
+      );
+    } else if (geometry['type'] == 'MultiPolygon') {
+      for (var polygonCoords in geometry['coordinates']) {
+        if (_isPointInPolygon(point, parseCoordinates(polygonCoords[0]))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
+    bool inside = false;
+    for (int i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      if ((polygon[i].longitude > point.longitude) !=
+              (polygon[j].longitude > point.longitude) &&
+          point.latitude <
+              (polygon[j].latitude - polygon[i].latitude) *
+                      (point.longitude - polygon[i].longitude) /
+                      (polygon[j].longitude - polygon[i].longitude) +
+                  polygon[i].latitude) {
+        inside = !inside;
+      }
+    }
+    return inside;
   }
 
   List<Polygon> _buildAllPolygons() {
