@@ -30,7 +30,7 @@ class WorldMapPage extends StatefulWidget {
 
 class _WorldMapPageState extends State<WorldMapPage> {
   List<Map<String, dynamic>> countries = [];
-  Set<String> selectedCountries = {}; // タップされた国のIDを保存
+  Set<int> selectedCountryIndices = {}; // タップされた国のインデックスを保存
   bool isLoading = true;
 
   @override
@@ -43,11 +43,33 @@ class _WorldMapPageState extends State<WorldMapPage> {
     final String data = await rootBundle.loadString('assets/countries.geojson');
     final json = jsonDecode(data);
 
+    final features =
+        (json['features'] as List)
+            .map((feature) => feature as Map<String, dynamic>)
+            .toList();
+
+    // デバッグ: ISO_A3の重複をチェック
+    Map<String, List<String>> isoToNames = {};
+    for (var feature in features) {
+      String iso = feature['properties']['ISO_A3'] ?? 'UNKNOWN';
+      String name = feature['properties']['NAME'] ?? 'Unknown';
+
+      if (!isoToNames.containsKey(iso)) {
+        isoToNames[iso] = [];
+      }
+      isoToNames[iso]!.add(name);
+    }
+
+    // 重複しているISO_A3を出力
+    debugPrint('=== ISO_A3 重複チェック ===');
+    isoToNames.forEach((iso, names) {
+      if (names.length > 1) {
+        print('$iso: ${names.join(", ")}');
+      }
+    });
+
     setState(() {
-      countries =
-          (json['features'] as List)
-              .map((feature) => feature as Map<String, dynamic>)
-              .toList();
+      countries = features;
       isLoading = false;
     });
   }
@@ -65,37 +87,127 @@ class _WorldMapPageState extends State<WorldMapPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('World Map')),
+      appBar: AppBar(
+        title: const Text('World Map'),
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Text('選択: ${selectedCountryIndices.length}か国'),
+            ),
+          ),
+        ],
+      ),
       body: FlutterMap(
         options: MapOptions(
           initialCenter: LatLng(20, 0),
-          initialZoom: 2,
+          initialZoom: 3,
+          minZoom: 2,
+          maxZoom: 10,
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.all, // すべてのインタラクション有効
+          ),
           onTap: (tapPosition, point) {
             _handleMapTap(point);
           },
         ),
         children: [PolygonLayer(polygons: _buildAllPolygons())],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          // 選択された国のリストを表示
+          showDialog(
+            context: context,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('選択された国'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children:
+                          selectedCountryIndices.map((index) {
+                            final country = countries[index];
+                            final name =
+                                country['properties']['NAME'] ?? 'Unknown';
+                            final iso =
+                                country['properties']['ISO_A3'] ?? 'N/A';
+                            return Text('$name ($iso)');
+                          }).toList(),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('閉じる'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          selectedCountryIndices.clear();
+                        });
+                        Navigator.pop(context);
+                      },
+                      child: const Text('すべてクリア'),
+                    ),
+                  ],
+                ),
+          );
+        },
+        child: const Icon(Icons.list),
+      ),
     );
   }
 
   void _handleMapTap(LatLng point) {
-    // タップされた座標がどの国のポリゴン内にあるか判定
-    for (var country in countries) {
-      final countryId = country['properties']['ISO_A3'] ?? '';
+    debugPrint('Tapped at: ${point.latitude}, ${point.longitude}');
+
+    int? tappedCountryIndex;
+    double smallestArea = double.infinity;
+
+    for (int i = 0; i < countries.length; i++) {
+      final country = countries[i];
+      final countryName = country['properties']['NAME'] ?? 'Unknown';
       final geometry = country['geometry'];
 
       if (_isPointInCountry(point, geometry)) {
-        setState(() {
-          if (selectedCountries.contains(countryId)) {
-            selectedCountries.remove(countryId); // 既に選択済みなら解除
-          } else {
-            selectedCountries.add(countryId); // 選択
-          }
-        });
-        break; // 最初に見つかった国で終了
+        debugPrint('Found: $countryName (index: $i)');
+
+        double area = _calculateCountryArea(geometry);
+
+        if (area < smallestArea) {
+          smallestArea = area;
+          tappedCountryIndex = i;
+        }
       }
     }
+
+    if (tappedCountryIndex != null) {
+      final selectedName = countries[tappedCountryIndex]['properties']['NAME'];
+      debugPrint('Selected: $selectedName');
+      setState(() {
+        if (selectedCountryIndices.contains(tappedCountryIndex)) {
+          selectedCountryIndices.remove(tappedCountryIndex);
+        } else {
+          selectedCountryIndices.add(tappedCountryIndex!);
+        }
+      });
+    }
+  }
+
+  double _calculateCountryArea(Map<String, dynamic> geometry) {
+    // 簡易的な面積計算（ポリゴンの点の数で概算）
+    int totalPoints = 0;
+
+    if (geometry['type'] == 'Polygon') {
+      totalPoints = (geometry['coordinates'][0] as List).length;
+    } else if (geometry['type'] == 'MultiPolygon') {
+      for (var polygonCoords in geometry['coordinates']) {
+        totalPoints += (polygonCoords[0] as List).length;
+      }
+    }
+
+    return totalPoints.toDouble();
   }
 
   bool _isPointInCountry(LatLng point, Map<String, dynamic> geometry) {
@@ -133,18 +245,17 @@ class _WorldMapPageState extends State<WorldMapPage> {
   List<Polygon> _buildAllPolygons() {
     List<Polygon> allPolygons = [];
 
-    for (var country in countries) {
-      final countryId = country['properties']['ISO_A3'] ?? '';
-      final isSelected = selectedCountries.contains(countryId);
+    for (int i = 0; i < countries.length; i++) {
+      final country = countries[i];
+      final isSelected = selectedCountryIndices.contains(i);
       final geometry = country['geometry'];
 
       final color =
           isSelected
-              ? Colors.blue.withOpacity(0.5)
-              : Colors.grey.withOpacity(0.3);
+              ? Colors.blue.withValues(alpha: 0.5)
+              : Colors.grey.withValues(alpha: 0.3);
 
       if (geometry['type'] == 'Polygon') {
-        // 単一ポリゴン
         allPolygons.add(
           Polygon(
             points: parseCoordinates(geometry['coordinates'][0]),
@@ -154,7 +265,6 @@ class _WorldMapPageState extends State<WorldMapPage> {
           ),
         );
       } else if (geometry['type'] == 'MultiPolygon') {
-        // 複数ポリゴン（すべて描画）
         for (var polygonCoords in geometry['coordinates']) {
           allPolygons.add(
             Polygon(
