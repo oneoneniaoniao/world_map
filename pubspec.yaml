@@ -13,7 +13,7 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  flutter_map: ^7.0.2 # 地図表示
+  flutter_map: ^8.0.0 # 地図表示（最新版でワールドラップをサポート）
   latlong2: ^0.9.0 # 座標処理
   http: ^1.2.0 # GeoJSONの取得（必要なら）
 
