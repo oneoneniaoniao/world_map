@@ -27,10 +27,9 @@ class _WorldMapPageState extends State<WorldMapPage> {
     final String data = await rootBundle.loadString('assets/countries.geojson');
     final json = jsonDecode(data);
 
-    final features =
-        (json['features'] as List)
-            .map((feature) => feature as Map<String, dynamic>)
-            .toList();
+    final features = (json['features'] as List)
+        .map((feature) => feature as Map<String, dynamic>)
+        .toList();
 
     setState(() {
       countries = features;
@@ -58,18 +57,21 @@ class _WorldMapPageState extends State<WorldMapPage> {
       ),
       body: FlutterMap(
         options: MapOptions(
-          initialCenter: LatLng(20, 0),
-          initialZoom: 3,
-          minZoom: 2,
+          initialCenter: const LatLng(33, 135),
+          initialZoom: 4,
+          minZoom: 3,
           maxZoom: 10,
+          // 回転を無効化（常に北を上に保つ）
           interactionOptions: const InteractionOptions(
-            flags: InteractiveFlag.all, // すべてのインタラクション有効
+            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
           ),
           onTap: (tapPosition, point) {
             _handleMapTap(point);
           },
         ),
-        children: [PolygonLayer(polygons: _buildAllPolygons())],
+        children: [
+          PolygonLayer(polygons: _buildAllPolygons()),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
@@ -124,10 +126,9 @@ class _WorldMapPageState extends State<WorldMapPage> {
       final isSelected = selectedCountryIndices.contains(i);
       final geometry = country['geometry'];
 
-      final color =
-          isSelected
-              ? Colors.blue.withValues(alpha: 0.5)
-              : Colors.grey.withValues(alpha: 0.3);
+      final color = isSelected
+          ? Colors.blue.withValues(alpha: 0.5)
+          : Colors.grey.withValues(alpha: 0.3);
 
       if (geometry['type'] == 'Polygon') {
         // 外側の輪郭のみ描画（ring[0]のみ）
@@ -164,38 +165,36 @@ class _WorldMapPageState extends State<WorldMapPage> {
   void _showSelectedCountriesDialog() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('選択された国'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children:
-                    selectedCountryIndices.map((index) {
-                      final country = countries[index];
-                      final name = country['properties']['NAME'] ?? 'Unknown';
-                      final iso = country['properties']['ISO_A3'] ?? 'N/A';
-                      return Text('$name ($iso)');
-                    }).toList(),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('閉じる'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    selectedCountryIndices.clear();
-                  });
-                  Navigator.pop(context);
-                },
-                child: const Text('すべてクリア'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('選択された国'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: selectedCountryIndices.map((index) {
+              final country = countries[index];
+              final name = country['properties']['NAME'] ?? 'Unknown';
+              final iso = country['properties']['ISO_A3'] ?? 'N/A';
+              return Text('$name ($iso)');
+            }).toList(),
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('閉じる'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                selectedCountryIndices.clear();
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('すべてクリア'),
+          ),
+        ],
+      ),
     );
   }
 }
