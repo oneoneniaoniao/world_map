@@ -16,6 +16,7 @@ dependencies:
   flutter_map: ^8.0.0 # 地図表示（最新版でワールドラップをサポート）
   latlong2: ^0.9.0 # 座標処理
   http: ^1.2.0 # GeoJSONの取得（必要なら）
+  speech_to_text: ^7.0.0 # 音声認識
 
 dev_dependencies:
   flutter_test:
