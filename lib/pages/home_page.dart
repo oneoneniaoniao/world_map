@@ -20,21 +20,6 @@ class HomePage extends StatelessWidget {
               '世界地図アプリ',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const WorldMapPage()),
-                );
-              },
-              icon: const Icon(Icons.map),
-              label: const Text('リアルタイム検索'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                minimumSize: const Size(200, 50),
-              ),
-            ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {
