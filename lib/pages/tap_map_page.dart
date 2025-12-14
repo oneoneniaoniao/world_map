@@ -4,48 +4,23 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../utils/geo_utils.dart';
-import '../utils/country_matcher.dart';
 
-class WorldMapPage extends StatefulWidget {
-  const WorldMapPage({super.key});
+class TapMapPage extends StatefulWidget {
+  const TapMapPage({super.key});
 
   @override
-  State<WorldMapPage> createState() => _WorldMapPageState();
+  State<TapMapPage> createState() => _TapMapPageState();
 }
 
-class _WorldMapPageState extends State<WorldMapPage> {
+class _TapMapPageState extends State<TapMapPage> {
   List<Map<String, dynamic>> countries = [];
-  Set<int> selectedCountryIndices = {}; // テキスト入力で選択された国のインデックスを保存
+  Set<int> selectedCountryIndices = {}; // タップされた国のインデックスを保存
   bool isLoading = true;
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     loadGeoJson();
-    _searchController.addListener(_onSearchChanged);
-  }
-
-  @override
-  void dispose() {
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged() {
-    final query = _searchController.text;
-    if (query.trim().isEmpty) {
-      setState(() {
-        selectedCountryIndices.clear();
-      });
-      return;
-    }
-
-    final matches = findCountries(query, countries);
-    setState(() {
-      selectedCountryIndices = matches.map((match) => match.index).toSet();
-    });
   }
 
   Future<void> loadGeoJson() async {
@@ -70,7 +45,7 @@ class _WorldMapPageState extends State<WorldMapPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('World Map'),
+        title: const Text('タップで選択'),
         actions: [
           Center(
             child: Padding(
@@ -80,37 +55,22 @@ class _WorldMapPageState extends State<WorldMapPage> {
           ),
         ],
       ),
-      body: Column(
+      body: FlutterMap(
+        options: MapOptions(
+          initialCenter: const LatLng(33, 135),
+          initialZoom: 4,
+          minZoom: 3,
+          maxZoom: 10,
+          // 回転を無効化（常に北を上に保つ）
+          interactionOptions: const InteractionOptions(
+            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+          ),
+          onTap: (tapPosition, point) {
+            _handleMapTap(point);
+          },
+        ),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: '国名を入力してください',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          Expanded(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter: const LatLng(33, 135),
-                initialZoom: 4,
-                minZoom: 3,
-                maxZoom: 10,
-                // 回転を無効化（常に北を上に保つ）
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-                ),
-                // タップ機能を無効化
-              ),
-              children: [
-                PolygonLayer(polygons: _buildAllPolygons()),
-              ],
-            ),
-          ),
+          PolygonLayer(polygons: _buildAllPolygons()),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -122,6 +82,41 @@ class _WorldMapPageState extends State<WorldMapPage> {
     );
   }
 
+  void _handleMapTap(LatLng point) {
+    debugPrint('Tapped at: ${point.latitude}, ${point.longitude}');
+
+    int? tappedCountryIndex;
+    double smallestArea = double.infinity;
+
+    for (int i = 0; i < countries.length; i++) {
+      final country = countries[i];
+      final countryName = country['properties']['NAME'] ?? 'Unknown';
+      final geometry = country['geometry'];
+
+      if (isPointInCountry(point, geometry)) {
+        debugPrint('Found: $countryName (index: $i)');
+
+        double area = calculateCountryArea(geometry);
+
+        if (area < smallestArea) {
+          smallestArea = area;
+          tappedCountryIndex = i;
+        }
+      }
+    }
+
+    if (tappedCountryIndex != null) {
+      final selectedName = countries[tappedCountryIndex]['properties']['NAME'];
+      debugPrint('Selected: $selectedName');
+      setState(() {
+        if (selectedCountryIndices.contains(tappedCountryIndex)) {
+          selectedCountryIndices.remove(tappedCountryIndex);
+        } else {
+          selectedCountryIndices.add(tappedCountryIndex!);
+        }
+      });
+    }
+  }
 
   List<Polygon> _buildAllPolygons() {
     List<Polygon> allPolygons = [];

@@ -1,7 +1,7 @@
 /// 国名マッチング機能
 /// 音声入力された文字列から該当する国を検索する
 
-import 'country_names_data.dart';
+import '../data/country_names_data.dart';
 
 /// 国名の検索結果
 class CountryMatch {
